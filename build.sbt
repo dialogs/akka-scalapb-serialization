@@ -13,9 +13,8 @@ organizationHomepage := Some(new URL("https://dlg.im"))
 
 PB.protobufSettings
 
-dialogDefaultSettings()
-
-bintrayRepository := "akka-scalapb-serialization"
+defaultDialogSettings
+mitLicense
 
 //PB.runProtoc in PB.protobufConfig := (args => com.github.os72.protocjar.Protoc.runProtoc("-v300" +: args.toArray))
 
