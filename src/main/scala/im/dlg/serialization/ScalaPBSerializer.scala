@@ -7,7 +7,7 @@ import com.trueaccord.scalapb.GeneratedMessage
 import scala.collection.concurrent.TrieMap
 import scala.util.{ Failure, Success }
 
-object DialogSerializer {
+object ScalaPBSerializer {
   private val ARRAY_OF_BYTE_ARRAY = Array[Class[_]](classOf[Array[Byte]])
 
   // FIXME: dynamically increase capacity
@@ -42,7 +42,7 @@ object DialogSerializer {
   def get(clazz: Class[_]) = reverseMap.get(clazz)
 
   def fromMessage(message: SerializedMessage): AnyRef = {
-    DialogSerializer.get(message.id) match {
+    ScalaPBSerializer.get(message.id) match {
       case Some(clazz) ⇒
         val field = clazz.getField("MODULE$").get(null)
 
@@ -59,7 +59,7 @@ object DialogSerializer {
   def fromBinary(bytes: Array[Byte]): AnyRef = fromMessage(SerializedMessage.parseFrom(bytes))
 
   def toMessage(o: AnyRef): SerializedMessage = {
-    DialogSerializer.get(o.getClass) match {
+    ScalaPBSerializer.get(o.getClass) match {
       case Some(id) ⇒
         o match {
           case m: GeneratedMessage  ⇒ SerializedMessage(id, ByteString.copyFrom(m.toByteArray))
@@ -74,29 +74,29 @@ object DialogSerializer {
   def toBinary(o: AnyRef): Array[Byte] = toMessage(o).toByteArray
 }
 
-class DialogSerializerObsolete extends Serializer {
+class ScalaPBSerializerObsolete extends Serializer {
 
   override def identifier: Int = 3456
 
   override def includeManifest: Boolean = false
 
-  override def fromBinary(bytes: Array[Byte], manifest: Option[Class[_]]): AnyRef = DialogSerializer.fromBinary(bytes)
+  override def fromBinary(bytes: Array[Byte], manifest: Option[Class[_]]): AnyRef = ScalaPBSerializer.fromBinary(bytes)
 
-  override def toBinary(o: AnyRef): Array[Byte] = DialogSerializer.toBinary(o)
+  override def toBinary(o: AnyRef): Array[Byte] = ScalaPBSerializer.toBinary(o)
 }
 
-class DialogSerializer extends SerializerWithStringManifest {
+class ScalaPBSerializer extends SerializerWithStringManifest {
 
   override def identifier: Int = 3457
 
   override def manifest(o: AnyRef): String =
-    DialogSerializer
+    ScalaPBSerializer
       .get(o.getClass)
       .map(_.toString)
       .getOrElse(throw new IllegalArgumentException(s"Class ${o.getClass} is not registered"))
 
   override def fromBinary(bytes: Array[Byte], manifest: String): AnyRef =
-    DialogSerializer.fromMessage(SerializedMessage(manifest.toInt, ByteString.copyFrom(bytes)))
+    ScalaPBSerializer.fromMessage(SerializedMessage(manifest.toInt, ByteString.copyFrom(bytes)))
 
   override def toBinary(o: AnyRef): Array[Byte] =
     o match {
