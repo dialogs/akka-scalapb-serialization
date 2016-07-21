@@ -1,9 +1,7 @@
-addSbtPlugin("com.trueaccord.scalapb" % "sbt-scalapb" % "0.5.21")
+resolvers += Resolver.url("dialog-sbt-plugins", url("https://dl.bintray.com/dialog/sbt-plugins"))(Resolver.ivyStylePatterns)
 
-libraryDependencies ++= Seq("com.github.os72" % "protoc-jar" % "3.0.0-b2")
+addSbtPlugin("com.trueaccord.scalapb" % "sbt-scalapb" % "0.5.34")
 
-addSbtPlugin("org.xerial.sbt" % "sbt-sonatype" % "0.5.1")
+// libraryDependencies ++= Seq("com.github.os72" % "protoc-jar" % "3.0.0-b2")
 
-addSbtPlugin("com.jsuereth" % "sbt-pgp" % "1.0.0")
-
-addSbtPlugin("com.github.gseitz" % "sbt-release" % "1.0.0")
+addSbtPlugin("im.dlg" % "sbt-dialog-houserules" % "0.1.12")

@@ -1,23 +1,22 @@
-package im.actor.serialization
+package im.dlg.serialization
 
 import akka.serialization._
-import com.github.benmanes.caffeine.cache.Caffeine
 import com.google.protobuf.{ ByteString, GeneratedMessage ⇒ GGeneratedMessage }
 import com.trueaccord.scalapb.GeneratedMessage
 
+import scala.collection.concurrent.TrieMap
 import scala.util.{ Failure, Success }
 
-object ActorSerializer {
+object DialogSerializer {
   private val ARRAY_OF_BYTE_ARRAY = Array[Class[_]](classOf[Array[Byte]])
 
-
   // FIXME: dynamically increase capacity
-  private val map = Caffeine.newBuilder().build[Integer, Class[_]]()
-  private val reverseMap = Caffeine.newBuilder().build[Class[_], Integer]()
+  private val map = TrieMap.empty[Int, Class[_]]
+  private val reverseMap = TrieMap.empty[Class[_], Int]
 
   def clean(): Unit = {
-    map.cleanUp()
-    reverseMap.cleanUp()
+    map.clear()
+    reverseMap.clear()
   }
 
   def register(id: Int, clazz: Class[_]): Unit = {
@@ -31,28 +30,28 @@ object ActorSerializer {
         }
       case Some(registered) ⇒
         if (!get(clazz).contains(id))
-          throw new IllegalArgumentException(s"There is already a mapping with id $id: ${map.getIfPresent(id)}")
+          throw new IllegalArgumentException(s"There is already a mapping with id $id: ${map.get(id).orNull}")
     }
   }
 
   def register(items: (Int, Class[_])*): Unit =
     items foreach { case (id, clazz) ⇒ register(id, clazz) }
 
-  def get(id: Int): Option[Class[_]] = Option(map.getIfPresent(id))
+  def get(id: Int): Option[Class[_]] = map.get(id)
 
-  def get(clazz: Class[_]) = Option(reverseMap.getIfPresent(clazz))
+  def get(clazz: Class[_]) = reverseMap.get(clazz)
 
   def fromMessage(message: SerializedMessage): AnyRef = {
-    ActorSerializer.get(message.id) match {
+    DialogSerializer.get(message.id) match {
       case Some(clazz) ⇒
         val field = clazz.getField("MODULE$").get(null)
 
         clazz
           .getDeclaredMethod("validate", ARRAY_OF_BYTE_ARRAY: _*)
           .invoke(field, message.bytes.toByteArray) match {
-          case Success(msg) ⇒ msg.asInstanceOf[GeneratedMessage]
-          case Failure(e)   ⇒ throw e
-        }
+            case Success(msg) ⇒ msg.asInstanceOf[GeneratedMessage]
+            case Failure(e)   ⇒ throw e
+          }
       case None ⇒ throw new IllegalArgumentException(s"Can't find mapping for id: ${message.id}")
     }
   }
@@ -60,7 +59,7 @@ object ActorSerializer {
   def fromBinary(bytes: Array[Byte]): AnyRef = fromMessage(SerializedMessage.parseFrom(bytes))
 
   def toMessage(o: AnyRef): SerializedMessage = {
-    ActorSerializer.get(o.getClass) match {
+    DialogSerializer.get(o.getClass) match {
       case Some(id) ⇒
         o match {
           case m: GeneratedMessage  ⇒ SerializedMessage(id, ByteString.copyFrom(m.toByteArray))
@@ -75,33 +74,33 @@ object ActorSerializer {
   def toBinary(o: AnyRef): Array[Byte] = toMessage(o).toByteArray
 }
 
-class ActorSerializerObsolete extends Serializer {
+class DialogSerializerObsolete extends Serializer {
 
   override def identifier: Int = 3456
 
   override def includeManifest: Boolean = false
 
-  override def fromBinary(bytes: Array[Byte], manifest: Option[Class[_]]): AnyRef = ActorSerializer.fromBinary(bytes)
+  override def fromBinary(bytes: Array[Byte], manifest: Option[Class[_]]): AnyRef = DialogSerializer.fromBinary(bytes)
 
-  override def toBinary(o: AnyRef): Array[Byte] = ActorSerializer.toBinary(o)
+  override def toBinary(o: AnyRef): Array[Byte] = DialogSerializer.toBinary(o)
 }
 
-class ActorSerializer extends SerializerWithStringManifest {
+class DialogSerializer extends SerializerWithStringManifest {
 
   override def identifier: Int = 3457
 
   override def manifest(o: AnyRef): String =
-    ActorSerializer
+    DialogSerializer
       .get(o.getClass)
       .map(_.toString)
       .getOrElse(throw new IllegalArgumentException(s"Class ${o.getClass} is not registered"))
 
   override def fromBinary(bytes: Array[Byte], manifest: String): AnyRef =
-    ActorSerializer.fromMessage(SerializedMessage(manifest.toInt, ByteString.copyFrom(bytes)))
+    DialogSerializer.fromMessage(SerializedMessage(manifest.toInt, ByteString.copyFrom(bytes)))
 
   override def toBinary(o: AnyRef): Array[Byte] =
     o match {
-      case g: GeneratedMessage => g.toByteArray
-      case _ => throw new IllegalArgumentException("Only GeneratedMessage is supported")
+      case g: GeneratedMessage ⇒ g.toByteArray
+      case _                   ⇒ throw new IllegalArgumentException("Only GeneratedMessage is supported")
     }
 }
