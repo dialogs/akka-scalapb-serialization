@@ -1,11 +1,11 @@
 package im.dlg.serialization
 
 import akka.serialization._
-import com.google.protobuf.{ ByteString, GeneratedMessage ⇒ GGeneratedMessage }
+import com.google.protobuf.{ByteString, GeneratedMessage ⇒ GGeneratedMessage}
 import com.trueaccord.scalapb.GeneratedMessage
 
 import scala.collection.concurrent.TrieMap
-import scala.util.{ Failure, Success }
+import scala.util.{Failure, Success, Try}
 
 object ScalaPBSerializer {
   private val ARRAY_OF_BYTE_ARRAY = Array[Class[_]](classOf[Array[Byte]])
@@ -13,11 +13,29 @@ object ScalaPBSerializer {
   // FIXME: dynamically increase capacity
   private val map = TrieMap.empty[Int, Class[_]]
   private val reverseMap = TrieMap.empty[Class[_], Int]
+  private val sernumPrefix = "sernum"
 
   def clean(): Unit = {
     map.clear()
     reverseMap.clear()
   }
+
+  def apply(clazz: Class[_]): Int = reverseMap.getOrElseUpdate(clazz, {
+    val fieldName = clazz.getDeclaredFields
+      .find(_.getName startsWith sernumPrefix)
+      .getOrElse(throw new IllegalArgumentException(s"Class ${clazz.getName} has no any field which matches '^$sernumPrefix\\d+$$'"))
+      .getName
+
+    val sernumStr = fieldName.drop(sernumPrefix.length)
+
+    val sernum = Try(sernumStr.toInt).getOrElse(throw new IllegalArgumentException(
+      s"The field '$fieldName' of class ${clazz.getName} has not contains valid (integer) suffix '^$sernumPrefix\\d+$$'"
+    ))
+
+    map.update(sernum, clazz)
+
+    sernum
+  })
 
   def register(id: Int, clazz: Class[_]): Unit = {
     get(id) match {
@@ -41,6 +59,8 @@ object ScalaPBSerializer {
 
   def get(clazz: Class[_]) = reverseMap.get(clazz)
 
+  def getOrElseUpdate(clazz: Class[_], id: ⇒ Int) = reverseMap.getOrElseUpdate(clazz, id)
+
   def fromMessage(message: SerializedMessage): AnyRef = {
     ScalaPBSerializer.get(message.id) match {
       case Some(clazz) ⇒
@@ -59,15 +79,11 @@ object ScalaPBSerializer {
   def fromBinary(bytes: Array[Byte]): AnyRef = fromMessage(SerializedMessage.parseFrom(bytes))
 
   def toMessage(o: AnyRef): SerializedMessage = {
-    ScalaPBSerializer.get(o.getClass) match {
-      case Some(id) ⇒
-        o match {
-          case m: GeneratedMessage  ⇒ SerializedMessage(id, ByteString.copyFrom(m.toByteArray))
-          case m: GGeneratedMessage ⇒ SerializedMessage(id, ByteString.copyFrom(m.toByteArray))
-          case _                    ⇒ throw new IllegalArgumentException(s"Can't serialize non-scalapb message [${o}]")
-        }
-      case None ⇒
-        throw new IllegalArgumentException(s"Can't find mapping for message [${o}]")
+    val id = ScalaPBSerializer.getOrElseUpdate(o.getClass, apply(o.getClass))
+    o match {
+      case m: GeneratedMessage  ⇒ SerializedMessage(id, ByteString.copyFrom(m.toByteArray))
+      case m: GGeneratedMessage ⇒ SerializedMessage(id, ByteString.copyFrom(m.toByteArray))
+      case _                    ⇒ throw new IllegalArgumentException(s"Can't serialize non-scalapb message [${o}]")
     }
   }
 
@@ -75,18 +91,13 @@ object ScalaPBSerializer {
 }
 
 class ScalaPBSerializerObsolete extends Serializer {
-
   override def identifier: Int = 3456
-
   override def includeManifest: Boolean = false
-
   override def fromBinary(bytes: Array[Byte], manifest: Option[Class[_]]): AnyRef = ScalaPBSerializer.fromBinary(bytes)
-
   override def toBinary(o: AnyRef): Array[Byte] = ScalaPBSerializer.toBinary(o)
 }
 
 class ScalaPBSerializer extends SerializerWithStringManifest {
-
   override def identifier: Int = 3457
 
   override def manifest(o: AnyRef): String =
