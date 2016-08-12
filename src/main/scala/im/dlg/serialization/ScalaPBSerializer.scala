@@ -100,11 +100,7 @@ class ScalaPBSerializerObsolete extends Serializer {
 class ScalaPBSerializer extends SerializerWithStringManifest {
   override def identifier: Int = 3457
 
-  override def manifest(o: AnyRef): String =
-    ScalaPBSerializer
-      .get(o.getClass)
-      .map(_.toString)
-      .getOrElse(throw new IllegalArgumentException(s"Class ${o.getClass} is not registered"))
+  override def manifest(o: AnyRef): String = ScalaPBSerializer(o.getClass).toString
 
   override def fromBinary(bytes: Array[Byte], manifest: String): AnyRef =
     ScalaPBSerializer.fromMessage(SerializedMessage(manifest.toInt, ByteString.copyFrom(bytes)))
