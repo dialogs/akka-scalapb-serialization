@@ -1,8 +1,10 @@
 package im.dlg.serialization
 
 import akka.serialization._
+import com.google.common.reflect.{ClassPath, TypeToken}
 import com.google.protobuf.{ByteString, GeneratedMessage ⇒ GGeneratedMessage}
 import com.trueaccord.scalapb.GeneratedMessage
+import org.slf4j.Logger
 
 import scala.collection.concurrent.TrieMap
 import scala.util.{Failure, Success, Try}
@@ -20,22 +22,25 @@ object ScalaPBSerializer {
     reverseMap.clear()
   }
 
-  def apply(clazz: Class[_]): Int = reverseMap.getOrElseUpdate(clazz, {
-    val fieldName = clazz.getDeclaredFields
-      .find(_.getName startsWith sernumPrefix)
-      .getOrElse(throw new IllegalArgumentException(s"Class ${clazz.getName} has no any field which matches '^$sernumPrefix\\d+$$'"))
-      .getName
+  def apply(clazz: Class[_]): Int =
+    get(clazz) match {
+      case Some(sernum) ⇒ sernum
+      case None ⇒
+        val fieldName = clazz.getDeclaredFields
+          .find(_.getName startsWith sernumPrefix)
+          .getOrElse(throw new IllegalArgumentException(s"Class ${clazz.getName} has no any field which matches '^$sernumPrefix\\d+$$'"))
+          .getName
 
-    val sernumStr = fieldName.drop(sernumPrefix.length)
+        val sernumStr = fieldName.drop(sernumPrefix.length)
 
-    val sernum = Try(sernumStr.toInt).getOrElse(throw new IllegalArgumentException(
-      s"The field '$fieldName' of class ${clazz.getName} has not contains valid (integer) suffix '^$sernumPrefix\\d+$$'"
-    ))
+        val sernum = Try(sernumStr.toInt).getOrElse(throw new IllegalArgumentException(
+          s"The field '$fieldName' of class ${clazz.getName} has not contains valid (integer) suffix '^$sernumPrefix\\d+$$'"
+        ))
 
-    map.update(sernum, clazz)
+        register(sernum, clazz)
 
-    sernum
-  })
+        sernum
+    }
 
   def register(id: Int, clazz: Class[_]): Unit = {
     get(id) match {
@@ -43,7 +48,10 @@ object ScalaPBSerializer {
         get(clazz) match {
           case Some(regId) ⇒ throw new IllegalArgumentException(s"There is already a mapping for class: $clazz, id: $regId")
           case None ⇒
-            map.put(id, Class.forName(clazz.getName + '$'))
+            val companion = Class.forName(clazz.getName + '$')
+            if (!companion.getDeclaredFields.exists(_.getName == "MODULE$"))
+              throw new IllegalArgumentException(s"Class ${clazz.getName} has no companion")
+            map.put(id, companion)
             reverseMap.put(clazz, id)
         }
       case Some(registered) ⇒
@@ -58,8 +66,6 @@ object ScalaPBSerializer {
   def get(id: Int): Option[Class[_]] = map.get(id)
 
   def get(clazz: Class[_]) = reverseMap.get(clazz)
-
-  def getOrElseUpdate(clazz: Class[_], id: ⇒ Int) = reverseMap.getOrElseUpdate(clazz, id)
 
   def fromMessage(message: SerializedMessage): AnyRef = {
     ScalaPBSerializer.get(message.id) match {
@@ -79,7 +85,7 @@ object ScalaPBSerializer {
   def fromBinary(bytes: Array[Byte]): AnyRef = fromMessage(SerializedMessage.parseFrom(bytes))
 
   def toMessage(o: AnyRef): SerializedMessage = {
-    val id = ScalaPBSerializer.getOrElseUpdate(o.getClass, apply(o.getClass))
+    val id = ScalaPBSerializer(o.getClass)
     o match {
       case m: GeneratedMessage  ⇒ SerializedMessage(id, ByteString.copyFrom(m.toByteArray))
       case m: GGeneratedMessage ⇒ SerializedMessage(id, ByteString.copyFrom(m.toByteArray))
@@ -88,6 +94,36 @@ object ScalaPBSerializer {
   }
 
   def toBinary(o: AnyRef): Array[Byte] = toMessage(o).toByteArray
+
+  def registerAllGeneratedMessages(packageName: String, classloader: ClassLoader, log: Logger): Unit = {
+    log.info("Start register the generated messages")
+
+    val it = ClassPath.from(classloader).getAllClasses.iterator()
+    val res = Iterator
+      .continually(if (it.hasNext) (true, it.next()) else (false, null))
+      .takeWhile(_._1)
+      .map(_._2)
+      .toList
+
+    val registered = res.count { ci ⇒
+      if (ci.getName startsWith packageName)
+        try {
+          val clazz = ci.load
+          if (TypeToken.of(clazz).getTypes.toArray.toList.map(_.toString)
+            .contains("com.trueaccord.scalapb.GeneratedMessage")) {
+            log.info(s"Register class ${clazz.getName} with sernum: ${apply(clazz)}")
+            true
+          } else false
+        } catch {
+          case e: Throwable ⇒
+            log.warn(s"Registration of class ${ci.getName} failed with ${e.getMessage}.")
+            false
+        }
+      else false
+    }
+
+    log.info(s"Finish loading generated messages. Total registered: $registered.")
+  }
 }
 
 class ScalaPBSerializerObsolete extends Serializer {
