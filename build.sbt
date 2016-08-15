@@ -13,6 +13,11 @@ scalapbSettings
 
 val akkaV = "2.4.8"
 
+resolvers += "mvnrepo" at "https://mvnrepository.com/artifact/"
+
 libraryDependencies ++= Seq(
-  "com.typesafe.akka" %% "akka-actor" % akkaV % "provided"
+  "com.typesafe.akka" %% "akka-actor"   % akkaV     % "provided",
+  "com.typesafe.akka" %% "akka-slf4j"   % akkaV     % "provided",
+  "com.google.guava"  %  "guava"        % "19.0",
+  "com.google.code.findbugs" % "jsr305" % "3.0.1"
 )
