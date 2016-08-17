@@ -26,16 +26,21 @@ object ScalaPBSerializer {
     get(clazz) match {
       case Some(sernum) ⇒ sernum
       case None ⇒
-        val fieldName = clazz.getDeclaredFields
+        val sernum = clazz.getDeclaredFields
           .find(_.getName startsWith sernumPrefix)
-          .getOrElse(throw new IllegalArgumentException(s"Class ${clazz.getName} has no any field which matches '^$sernumPrefix\\d+$$'"))
-          .getName
+          .map { fieldName ⇒
+            val sernumStr = fieldName.getName.drop(sernumPrefix.length)
 
-        val sernumStr = fieldName.drop(sernumPrefix.length)
-
-        val sernum = Try(sernumStr.toInt).getOrElse(throw new IllegalArgumentException(
-          s"The field '$fieldName' of class ${clazz.getName} has not contains valid (integer) suffix '^$sernumPrefix\\d+$$'"
-        ))
+            Try(sernumStr.toInt).getOrElse(throw new IllegalArgumentException(
+              s"The field '$fieldName' of class ${clazz.getName} has not contains valid (integer) suffix '^$sernumPrefix\\d+$$'"
+            ))
+          }
+          .getOrElse {
+            println(s"Class ${clazz.getName} has no any field which matches '^$sernumPrefix\\d+$$'. Trying with hashCode")
+            val name = clazz.getName
+            val i = name.lastIndexOf("$")
+            (if (i != -1 && i != (name.length - 1)) name.substring(i) else name).hashCode
+          }
 
         register(sernum, clazz)
 
