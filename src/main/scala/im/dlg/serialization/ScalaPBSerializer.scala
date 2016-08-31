@@ -22,7 +22,7 @@ object ScalaPBSerializer {
     reverseMap.clear()
   }
 
-  def apply(clazz: Class[_]): Int =
+  def apply(clazz: Class[_], log: Option[Logger] = None): Int =
     get(clazz) match {
       case Some(sernum) ⇒ sernum
       case None ⇒
@@ -37,7 +37,11 @@ object ScalaPBSerializer {
           }
           .getOrElse {
             val code = clazz.getName.hashCode
-            println(s"Class ${clazz.getName} has no field which matches '^$sernumPrefix\\d+$$'. Trying with hashCode $code")
+            log
+              .map(l ⇒ l.warn(_: String))
+              .getOrElse(println(_: String))(
+                s"Class ${clazz.getName} has no field which matches '^$sernumPrefix\\d+$$'. Trying with hashCode $code"
+              )
             code
           }
 
@@ -121,7 +125,7 @@ object ScalaPBSerializer {
         } catch {
           case e: Throwable ⇒
             log.warn(s"Registration of class ${ci.getName} failed with ${e.getMessage}.")
-            false
+            throw e
         }
       else false
     }
