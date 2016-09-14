@@ -1,5 +1,7 @@
 package im.dlg.serialization
 
+import java.lang.ClassNotFoundException
+
 import akka.serialization._
 import com.google.common.reflect.{ClassPath, TypeToken}
 import com.google.protobuf.{ByteString, GeneratedMessage ⇒ GGeneratedMessage}
@@ -22,32 +24,25 @@ object ScalaPBSerializer {
     reverseMap.clear()
   }
 
-  def apply(clazz: Class[_], log: Option[Logger] = None): Int =
+  def apply(clazz: Class[_], log: Option[Logger] = None): Option[Int] =
     get(clazz) match {
-      case Some(sernum) ⇒ sernum
+      case p @ Some(_) ⇒ p
       case None ⇒
+        val toLog = (s: String) ⇒ log.fold(println(s))(_.warn(s))
         val sernum = clazz.getDeclaredFields
           .find(_.getName startsWith sernumPrefix)
           .map { field ⇒
             val sernumStr = field.getName.drop(sernumPrefix.length)
-
             Try(sernumStr.toInt).getOrElse(throw new IllegalArgumentException(
-              s"The field '${field.getName}' of class ${clazz.getName} has not contains valid (integer) suffix '^$sernumPrefix\\d+$$'"
+              s"The field '${field.getName}' of class ${clazz.getName} does not contain valid (integer) suffix '^$sernumPrefix\\d+$$'"
             ))
           }
           .getOrElse {
             val code = clazz.getName.hashCode
-            log
-              .map(l ⇒ l.warn(_: String))
-              .getOrElse(println(_: String))(
-                s"Class ${clazz.getName} has no field which matches '^$sernumPrefix\\d+$$'. Trying with hashCode $code"
-              )
+            toLog(s"Class ${clazz.getName} has no field matching '^$sernumPrefix\\d+$$'. Trying with hashCode $code")
             code
           }
-
-        register(sernum, clazz)
-
-        sernum
+        Try(register(sernum, clazz)).toOption.map(_ ⇒ sernum)
     }
 
   def register(id: Int, clazz: Class[_]): Unit = {
@@ -56,11 +51,15 @@ object ScalaPBSerializer {
         get(clazz) match {
           case Some(regId) ⇒ throw new IllegalArgumentException(s"There is already a mapping for class: $clazz, id: $regId")
           case None ⇒
-            val companion = Class.forName(clazz.getName + '$')
-            if (!companion.getDeclaredFields.exists(_.getName == "MODULE$"))
-              throw new IllegalArgumentException(s"Class ${clazz.getName} has no companion")
-            map.put(id, companion)
-            reverseMap.put(clazz, id)
+            try {
+              val companion = Class.forName(clazz.getName + '$')
+              if (!companion.getDeclaredFields.exists(_.getName == "MODULE$"))
+                throw new IllegalArgumentException(s"Class ${clazz.getName} has no companion")
+              map.put(id, companion)
+              reverseMap.put(clazz, id)
+            } catch {
+              case exc: ClassNotFoundException ⇒ println(s"Excluding ${clazz.getName} from registration due to abscence of companion object (possibly, it is a trait)")
+            }
         }
       case Some(registered) ⇒
         if (!get(clazz).contains(id))
@@ -92,13 +91,13 @@ object ScalaPBSerializer {
 
   def fromBinary(bytes: Array[Byte]): AnyRef = fromMessage(SerializedMessage.parseFrom(bytes))
 
-  def toMessage(o: AnyRef): SerializedMessage = {
-    val id = ScalaPBSerializer(o.getClass)
-    o match {
+  def toMessage(o: AnyRef): SerializedMessage = ScalaPBSerializer(o.getClass) match {
+    case Some(id) ⇒ o match {
       case m: GeneratedMessage  ⇒ SerializedMessage(id, ByteString.copyFrom(m.toByteArray))
       case m: GGeneratedMessage ⇒ SerializedMessage(id, ByteString.copyFrom(m.toByteArray))
-      case _                    ⇒ throw new IllegalArgumentException(s"Can't serialize non-scalapb message [${o}]")
+      case _                    ⇒ throw new IllegalArgumentException(s"Can't serialize non-scalapb message [$o]")
     }
+    case None ⇒ throw new IllegalArgumentException(s"Can't serialize non-scalapb message [$o]")
   }
 
   def toBinary(o: AnyRef): Array[Byte] = toMessage(o).toByteArray
@@ -117,11 +116,17 @@ object ScalaPBSerializer {
       if (ci.getName startsWith packageName)
         try {
           val clazz = ci.load
-          if (TypeToken.of(clazz).getTypes.toArray.toList.map(_.toString)
-            .contains("com.trueaccord.scalapb.GeneratedMessage")) {
-            log.info(s"Register class ${clazz.getName} with sernum: ${apply(clazz)}")
-            true
-          } else false
+          if (TypeToken.of(clazz).getTypes.toArray.toList.map(_.toString).contains("com.trueaccord.scalapb.GeneratedMessage"))
+            apply(clazz) match {
+              case Some(sernum) ⇒
+                log.info(s"Registered class ${clazz.getName} with sernum: $sernum")
+                true
+              case None ⇒
+                log.info(s"Excluded ${clazz.getName} from registration due to abscence of companion object")
+                false
+            }
+          else
+            false
         } catch {
           case e: Throwable ⇒
             log.warn(s"Registration of class ${ci.getName} failed with ${e.getMessage}.")
