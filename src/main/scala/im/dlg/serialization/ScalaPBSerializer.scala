@@ -1,7 +1,5 @@
 package im.dlg.serialization
 
-import java.lang.ClassNotFoundException
-
 import akka.serialization._
 import com.google.common.reflect.{ClassPath, TypeToken}
 import com.google.protobuf.{ByteString, GeneratedMessage ⇒ GGeneratedMessage}
@@ -149,7 +147,10 @@ class ScalaPBSerializerObsolete extends Serializer {
 class ScalaPBSerializer extends SerializerWithStringManifest {
   override def identifier: Int = 3457
 
-  override def manifest(o: AnyRef): String = ScalaPBSerializer(o.getClass).toString
+  override def manifest(o: AnyRef): String = ScalaPBSerializer(o.getClass) match {
+    case Some(m) ⇒ m.toString
+    case None    ⇒ throw new IllegalArgumentException(s"Unable to get manifest for ${o.getClass.getName}")
+  }
 
   override def fromBinary(bytes: Array[Byte], manifest: String): AnyRef =
     ScalaPBSerializer.fromMessage(SerializedMessage(manifest.toInt, ByteString.copyFrom(bytes)))
