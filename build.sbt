@@ -11,7 +11,7 @@ defaultDialogSettings
 mitLicense
 scalapbSettings
 
-val akkaV = "2.4.8"
+val akkaV = "2.4.11"
 
 resolvers += "mvnrepo" at "https://mvnrepository.com/artifact/"
 

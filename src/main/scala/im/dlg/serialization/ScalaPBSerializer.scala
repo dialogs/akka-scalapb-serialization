@@ -2,9 +2,9 @@ package im.dlg.serialization
 
 import akka.serialization._
 import com.google.common.reflect.{ClassPath, TypeToken}
-import com.google.protobuf.{ByteString, GeneratedMessage ⇒ GGeneratedMessage}
+import com.google.protobuf.{ByteString, GeneratedMessage => GGeneratedMessage}
 import com.trueaccord.scalapb.GeneratedMessage
-import org.slf4j.Logger
+import org.slf4j.{Logger, LoggerFactory}
 
 import scala.collection.concurrent.TrieMap
 import scala.util.{Failure, Success, Try}
@@ -16,17 +16,17 @@ object ScalaPBSerializer {
   private val map = TrieMap.empty[Int, Class[_]]
   private val reverseMap = TrieMap.empty[Class[_], Int]
   private val sernumPrefix = "sernum"
+  private val log = LoggerFactory.getLogger(getClass)
 
   def clean(): Unit = {
     map.clear()
     reverseMap.clear()
   }
 
-  def apply(clazz: Class[_], log: Option[Logger] = None): Option[Int] =
+  def apply(clazz: Class[_]): Option[Int] =
     get(clazz) match {
       case p @ Some(_) ⇒ p
       case None ⇒
-        val toLog = (s: String) ⇒ log.fold(println(s))(_.warn(s))
         val sernum = clazz.getDeclaredFields
           .find(_.getName startsWith sernumPrefix)
           .map { field ⇒
@@ -37,9 +37,12 @@ object ScalaPBSerializer {
           }
           .getOrElse {
             val code = clazz.getName.hashCode
-            toLog(s"Class ${clazz.getName} has no field matching '^$sernumPrefix\\d+$$'. Trying with hashCode $code")
+            log.warn(s"Class ${clazz.getName} has no field matching '^$sernumPrefix\\d+$$'. Trying with hashCode $code")
             code
           }
+
+        log.debug("Registering sernum {} for class {}", sernum, clazz.getName)
+
         Try(register(sernum, clazz)).toOption.map(_ ⇒ sernum)
     }
 
