@@ -2,7 +2,7 @@ package im.dlg.serialization
 
 import akka.serialization._
 import com.google.common.reflect.{ClassPath, TypeToken}
-import com.google.protobuf.{ByteString, GeneratedMessage => GGeneratedMessage}
+import com.google.protobuf.{ByteString, GeneratedMessage ⇒ GGeneratedMessage}
 import com.trueaccord.scalapb.GeneratedMessage
 import org.slf4j.{Logger, LoggerFactory}
 
