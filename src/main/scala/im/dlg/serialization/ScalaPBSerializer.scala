@@ -4,7 +4,7 @@ import akka.serialization._
 import com.google.common.reflect.{ClassPath, TypeToken}
 import com.google.protobuf.{ByteString, GeneratedMessage ⇒ GGeneratedMessage}
 import com.trueaccord.scalapb.GeneratedMessage
-import org.slf4j.{Logger, LoggerFactory}
+import org.slf4j.LoggerFactory
 
 import scala.collection.concurrent.TrieMap
 import scala.util.{Failure, Success, Try}
@@ -12,7 +12,6 @@ import scala.util.{Failure, Success, Try}
 object ScalaPBSerializer {
   private val ARRAY_OF_BYTE_ARRAY = Array[Class[_]](classOf[Array[Byte]])
 
-  // FIXME: dynamically increase capacity
   private val map = TrieMap.empty[Int, Class[_]]
   private val reverseMap = TrieMap.empty[Class[_], Int]
   private val sernumPrefix = "sernum"
@@ -40,8 +39,6 @@ object ScalaPBSerializer {
             log.warn(s"Class ${clazz.getName} has no field matching '^$sernumPrefix\\d+$$'. Trying with hashCode $code")
             code
           }
-
-        log.debug("Registering sernum {} for class {}", sernum, clazz.getName)
 
         Try(register(sernum, clazz)).toOption.map(_ ⇒ sernum)
     }
@@ -103,7 +100,7 @@ object ScalaPBSerializer {
 
   def toBinary(o: AnyRef): Array[Byte] = toMessage(o).toByteArray
 
-  def registerAllGeneratedMessages(packageName: String, classloader: ClassLoader, log: Logger): Unit = {
+  def registerAllGeneratedMessages(packageName: String, classloader: ClassLoader): Unit = {
     log.info("Start register the generated messages")
 
     val it = ClassPath.from(classloader).getAllClasses.iterator()
