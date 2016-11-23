@@ -22,6 +22,8 @@ object ScalaPBSerializer {
     reverseMap.clear()
   }
 
+  def registeredClasses: Int = map.keySet.size
+
   def apply(clazz: Class[_]): Option[Int] =
     get(clazz) match {
       case p @ Some(_) ⇒ p
@@ -36,7 +38,8 @@ object ScalaPBSerializer {
           }
           .getOrElse {
             val code = clazz.getName.hashCode
-            log.warn(s"Class ${clazz.getName} has no field matching '^$sernumPrefix\\d+$$'. Trying with hashCode $code")
+            log.warn(
+              s"Class ${clazz.getName} has no field matching '^$sernumPrefix\\d+$$'. Trying with hashCode $code")
             code
           }
 
@@ -47,21 +50,27 @@ object ScalaPBSerializer {
     get(id) match {
       case None ⇒
         get(clazz) match {
-          case Some(regId) ⇒ throw new IllegalArgumentException(s"There is already a mapping for class: $clazz, id: $regId")
+          case Some(regId) ⇒
+            throw new IllegalArgumentException(
+              s"There is already a mapping for class: $clazz, id: $regId")
           case None ⇒
             try {
               val companion = Class.forName(clazz.getName + '$')
               if (!companion.getDeclaredFields.exists(_.getName == "MODULE$"))
-                throw new IllegalArgumentException(s"Class ${clazz.getName} has no companion")
+                throw new IllegalArgumentException(
+                  s"Class ${clazz.getName} has no companion")
               map.put(id, companion)
               reverseMap.put(clazz, id)
             } catch {
-              case exc: ClassNotFoundException ⇒ println(s"Excluding ${clazz.getName} from registration due to abscence of companion object (possibly, it is a trait)")
+              case exc: ClassNotFoundException ⇒
+                println(
+                  s"Excluding ${clazz.getName} from registration due to abscence of companion object (possibly, it is a trait)")
             }
         }
       case Some(registered) ⇒
         if (!get(clazz).contains(id))
-          throw new IllegalArgumentException(s"There is already a mapping with id $id: ${map.get(id).orNull}")
+          throw new IllegalArgumentException(
+            s"There is already a mapping with id $id: ${map.get(id).orNull}")
     }
   }
 
@@ -80,27 +89,40 @@ object ScalaPBSerializer {
         clazz
           .getDeclaredMethod("validate", ARRAY_OF_BYTE_ARRAY: _*)
           .invoke(field, message.bytes.toByteArray) match {
-            case Success(msg) ⇒ msg.asInstanceOf[GeneratedMessage]
-            case Failure(e)   ⇒ throw e
-          }
-      case None ⇒ throw new IllegalArgumentException(s"Can't find mapping for id: ${message.id}")
+          case Success(msg) ⇒
+            msg.asInstanceOf[AnyRef] //.asInstanceOf[GeneratedMessage]
+          case Failure(e) ⇒ throw e
+        }
+      case None ⇒
+        throw new IllegalArgumentException(
+          s"Can't find mapping for id: ${message.id}")
     }
   }
 
-  def fromBinary(bytes: Array[Byte]): AnyRef = fromMessage(SerializedMessage.parseFrom(bytes))
+  def fromBinary(bytes: Array[Byte]): AnyRef =
+    fromMessage(SerializedMessage.parseFrom(bytes))
 
-  def toMessage(o: AnyRef): SerializedMessage = ScalaPBSerializer(o.getClass) match {
-    case Some(id) ⇒ o match {
-      case m: GeneratedMessage  ⇒ SerializedMessage(id, ByteString.copyFrom(m.toByteArray))
-      case m: GGeneratedMessage ⇒ SerializedMessage(id, ByteString.copyFrom(m.toByteArray))
-      case _                    ⇒ throw new IllegalArgumentException(s"Can't serialize non-scalapb message [$o]")
+  def toMessage(o: AnyRef): SerializedMessage =
+    ScalaPBSerializer(o.getClass) match {
+      case Some(id) ⇒
+        o match {
+          case m: GeneratedMessage ⇒
+            SerializedMessage(id, ByteString.copyFrom(m.toByteArray))
+          case m: GGeneratedMessage ⇒
+            SerializedMessage(id, ByteString.copyFrom(m.toByteArray))
+          case _ ⇒
+            throw new IllegalArgumentException(
+              s"Can't serialize non-scalapb message [$o]")
+        }
+      case None ⇒
+        throw new IllegalArgumentException(
+          s"Can't serialize non-scalapb message [$o]")
     }
-    case None ⇒ throw new IllegalArgumentException(s"Can't serialize non-scalapb message [$o]")
-  }
 
   def toBinary(o: AnyRef): Array[Byte] = toMessage(o).toByteArray
 
-  def registerAllGeneratedMessages(packageName: String, classloader: ClassLoader): Unit = {
+  def registerAllGeneratedMessages(packageName: String,
+                                   classloader: ClassLoader): Unit = {
     log.info("Start register the generated messages")
 
     val it = ClassPath.from(classloader).getAllClasses.iterator()
@@ -114,50 +136,66 @@ object ScalaPBSerializer {
       if (ci.getName startsWith packageName)
         try {
           val clazz = ci.load
-          if (TypeToken.of(clazz).getTypes.toArray.toList.map(_.toString).contains("com.trueaccord.scalapb.GeneratedMessage"))
+          if (TypeToken
+                .of(clazz)
+                .getTypes
+                .toArray
+                .toList
+                .map(_.toString)
+                .contains("com.trueaccord.scalapb.GeneratedMessage"))
             apply(clazz) match {
               case Some(sernum) ⇒
-                log.info(s"Registered class ${clazz.getName} with sernum: $sernum")
+                log.info(
+                  s"Registered class ${clazz.getName} with sernum: $sernum")
                 true
               case None ⇒
-                log.info(s"Excluded ${clazz.getName} from registration due to abscence of companion object")
+                log.info(
+                  s"Excluded ${clazz.getName} from registration due to abscence of companion object")
                 false
-            }
-          else
+            } else
             false
         } catch {
           case e: Throwable ⇒
-            log.warn(s"Registration of class ${ci.getName} failed with ${e.getMessage}.")
+            log.warn(
+              s"Registration of class ${ci.getName} failed with ${e.getMessage}.")
             throw e
-        }
-      else false
+        } else false
     }
 
-    log.info(s"Finish loading generated messages. Total registered: $registered.")
+    log.info(
+      s"Finish loading generated messages. Total registered: $registered.")
   }
 }
 
 class ScalaPBSerializerObsolete extends Serializer {
   override def identifier: Int = 3456
   override def includeManifest: Boolean = false
-  override def fromBinary(bytes: Array[Byte], manifest: Option[Class[_]]): AnyRef = ScalaPBSerializer.fromBinary(bytes)
+  override def fromBinary(bytes: Array[Byte],
+                          manifest: Option[Class[_]]): AnyRef =
+    ScalaPBSerializer.fromBinary(bytes)
   override def toBinary(o: AnyRef): Array[Byte] = ScalaPBSerializer.toBinary(o)
 }
 
 class ScalaPBSerializer extends SerializerWithStringManifest {
   override def identifier: Int = 3457
 
-  override def manifest(o: AnyRef): String = ScalaPBSerializer(o.getClass) match {
-    case Some(m) ⇒ m.toString
-    case None    ⇒ throw new IllegalArgumentException(s"Unable to get manifest for ${o.getClass.getName}")
-  }
+  override def manifest(o: AnyRef): String =
+    ScalaPBSerializer(o.getClass) match {
+      case Some(m) ⇒ m.toString
+      case None ⇒
+        throw new IllegalArgumentException(
+          s"Unable to get manifest for ${o.getClass.getName}")
+    }
 
   override def fromBinary(bytes: Array[Byte], manifest: String): AnyRef =
-    ScalaPBSerializer.fromMessage(SerializedMessage(manifest.toInt, ByteString.copyFrom(bytes)))
+    ScalaPBSerializer
+      .fromMessage(
+        SerializedMessage(manifest.toInt, ByteString.copyFrom(bytes)))
 
   override def toBinary(o: AnyRef): Array[Byte] =
     o match {
       case g: GeneratedMessage ⇒ g.toByteArray
-      case _                   ⇒ throw new IllegalArgumentException("Only GeneratedMessage is supported")
+      case _ ⇒
+        throw new IllegalArgumentException("Only GeneratedMessage is supported")
     }
 }

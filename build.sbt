@@ -1,6 +1,6 @@
 import im.dlg.DialogHouseRules._
 
-scalaVersion := "2.11.7"
+scalaVersion := "2.12.4"
 
 name := "akka-scalapb-serialization"
 organization := "im.dlg"
@@ -11,7 +11,7 @@ defaultDialogSettings
 mitLicense
 scalapbSettings
 
-val akkaV = "2.4.11"
+val akkaV = "2.5.7"
 
 resolvers += "mvnrepo" at "https://mvnrepository.com/artifact/"
 
