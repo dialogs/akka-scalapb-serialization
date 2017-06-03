@@ -1,6 +1,6 @@
 import im.dlg.DialogHouseRules._
 
-scalaVersion := "2.11.7"
+scalaVersion := "2.11.11"
 
 name := "akka-scalapb-serialization"
 organization := "im.dlg"
@@ -11,13 +11,13 @@ defaultDialogSettings
 mitLicense
 scalapbSettings
 
-val akkaV = "2.4.11"
+val akkaV = "2.5.2"
 
 resolvers += "mvnrepo" at "https://mvnrepository.com/artifact/"
 
 libraryDependencies ++= Seq(
-  "com.typesafe.akka" %% "akka-actor"   % akkaV     % "provided",
-  "com.typesafe.akka" %% "akka-slf4j"   % akkaV     % "provided",
-  "com.google.guava"  %  "guava"        % "19.0",
-  "com.google.code.findbugs" % "jsr305" % "3.0.1"
+  "com.typesafe.akka" %% "akka-actor" % akkaV % "provided",
+  "com.typesafe.akka" %% "akka-slf4j" % akkaV % "provided",
+  "com.google.guava" % "guava" % "19.0",
+  "com.google.code.findbugs" % "jsr305" % "3.0.2"
 )
